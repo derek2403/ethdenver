@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, DollarSign, AlertTriangle, CheckCircle, Send, Share2, CreditCard, XCircle, FilePlus } from 'lucide-react';
 import { useInvoiceStore } from '../../stores/invoiceStore';
+import { useUserStore } from '../../stores/userStore';
 import type { InvoiceResponse } from '../../openapi.d.ts';
 import PageTransition from '../../components/ui/PageTransition';
 import SummaryCard from '../../components/ui/SummaryCard';
@@ -11,7 +12,8 @@ import ActionMenu, { type ActionItem } from '../../components/ui/ActionMenu';
 import { formatCurrency } from '../../components/ui/roles';
 
 const SellerDashboard: React.FC = () => {
-    const { invoices, fetchInvoices, requestPayment, cancelInvoice, shareWithCarrier, shareWithBookkeeper } = useInvoiceStore();
+    const { invoices, fetchInvoices, requestPayment, markPaid, cancelInvoice, shareWithCarrier, shareWithBookkeeper } = useInvoiceStore();
+    const { user } = useUserStore();
 
     useEffect(() => {
         fetchInvoices();
@@ -25,18 +27,27 @@ const SellerDashboard: React.FC = () => {
     const totalRevenue = invoices.filter((inv: InvoiceResponse) => inv.status === 'Paid').reduce((sum: number, inv: InvoiceResponse) => sum + (inv.grandTotal || 0), 0);
     const outstandingBalance = invoices.filter((inv: InvoiceResponse) => inv.status !== 'Paid').reduce((sum: number, inv: InvoiceResponse) => sum + (inv.balanceDue || 0), 0);
 
+    // Derive carrier/bookkeeper party IDs from seller's party (same participant fingerprint)
+    const sellerFingerprint = user?.party?.split('::')[1] || '';
+    const CARRIER_PARTY = sellerFingerprint ? `logistics::${sellerFingerprint}` : '';
+    const BOOKKEEPER_PARTY = sellerFingerprint ? `finance::${sellerFingerprint}` : '';
+
     const handleShareWithCarrier = async (contractId: string) => {
-        const carrierParty = window.prompt('Enter Carrier party ID:');
+        const carrierParty = window.prompt('Enter Carrier party ID:', CARRIER_PARTY);
         if (carrierParty) await shareWithCarrier(contractId, carrierParty);
     };
 
     const handleShareWithBookkeeper = async (contractId: string) => {
-        const bookkeeperParty = window.prompt('Enter Bookkeeper party ID:');
+        const bookkeeperParty = window.prompt('Enter Bookkeeper party ID:', BOOKKEEPER_PARTY);
         if (bookkeeperParty) await shareWithBookkeeper(contractId, bookkeeperParty);
     };
 
     const handleRequestPayment = async (contractId: string) => {
         await requestPayment(contractId, { prepareUntilDuration: 'PT1H', settleBeforeDuration: 'PT2H' });
+    };
+
+    const handleMarkPaid = async (contractId: string) => {
+        await markPaid(contractId);
     };
 
     const handleCancel = async (contractId: string) => {
@@ -47,6 +58,7 @@ const SellerDashboard: React.FC = () => {
     const getActions = (invoice: InvoiceResponse): ActionItem[] => {
         if (invoice.status === 'Paid') return [];
         return [
+            { label: 'Mark as Paid', icon: CheckCircle, onClick: () => handleMarkPaid(invoice.contractId) },
             { label: 'Share w/ Carrier', icon: Share2, onClick: () => handleShareWithCarrier(invoice.contractId) },
             { label: 'Share w/ Bookkeeper', icon: Send, onClick: () => handleShareWithBookkeeper(invoice.contractId) },
             { label: 'Request Payment', icon: CreditCard, onClick: () => handleRequestPayment(invoice.contractId) },

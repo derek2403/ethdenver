@@ -114,8 +114,8 @@ public class SharedSecretConfig {
 
                     return new AuthenticatedUserProvider.DefaultAuthenticatedUser(
                             name,
-                            tenant.getTenantId(),
                             tenant.getPartyId(),
+                            tenant.getTenantId(),
                             roles,
                             admin
                     );

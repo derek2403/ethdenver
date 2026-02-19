@@ -21,20 +21,23 @@ init() {
 allocate_extra_parties() {
   local participant="canton:3${PARTICIPANT_JSON_API_PORT_SUFFIX}"
 
-  SELLER_PARTY=$(allocate_party "$APP_PROVIDER_PARTICIPANT_ADMIN_TOKEN" "seller" "$participant")
-  BUYER_PARTY=$(allocate_party "$APP_PROVIDER_PARTICIPANT_ADMIN_TOKEN" "buyer" "$participant")
+  # Seller = APP_PROVIDER_PARTY (canton:3) — matches licensing pattern where provider = seller
+  SELLER_PARTY=$APP_PROVIDER_PARTY
+  # Buyer = APP_USER_PARTY (canton:2) — wallet on canton:2 can see AllocationRequests
+  BUYER_PARTY=$APP_USER_PARTY
+  # Extra disclosure-only parties — allocated fresh on canton:3
   LOGISTICS_PARTY=$(allocate_party "$APP_PROVIDER_PARTICIPANT_ADMIN_TOKEN" "logistics" "$participant")
   FINANCE_PARTY=$(allocate_party "$APP_PROVIDER_PARTICIPANT_ADMIN_TOKEN" "finance" "$participant")
 
   local backendUserId=$1
-  for PARTY_ID in $SELLER_PARTY $BUYER_PARTY $LOGISTICS_PARTY $FINANCE_PARTY; do
+  for PARTY_ID in $LOGISTICS_PARTY $FINANCE_PARTY; do
     grant_rights "$APP_PROVIDER_PARTICIPANT_ADMIN_TOKEN" $backendUserId $PARTY_ID "ReadAs ActAs" "$participant"
   done
 
   # Grant PQS user ReadAs for extra parties so they appear in PQS queries
   local pqsUserId=${AUTH_APP_PROVIDER_PQS_USER_ID:-${AUTH_APP_PROVIDER_PQS_USER_NAME}}
   if [ -n "$pqsUserId" ]; then
-    for PARTY_ID in $SELLER_PARTY $BUYER_PARTY $LOGISTICS_PARTY $FINANCE_PARTY; do
+    for PARTY_ID in $LOGISTICS_PARTY $FINANCE_PARTY; do
       grant_rights "$APP_PROVIDER_PARTICIPANT_ADMIN_TOKEN" $pqsUserId $PARTY_ID "ReadAs" "$participant"
     done
   fi

@@ -21,7 +21,8 @@ register_tenant() {
   local tenantId=$3
   local tenantUser=$4
   local walletUrl=$5
-  echo "register_tenant $providerAdmin $partyId $tenantId $tenantUser" >&2
+  local isInternal=${6:-false}
+  echo "register_tenant $providerAdmin $partyId $tenantId $tenantUser (internal=$isInternal)" >&2
 
   curl -c cookies.txt -X POST \
     -d "username=${providerAdmin}" \
@@ -36,7 +37,7 @@ register_tenant() {
      "walletUrl": "'$walletUrl'",
      "clientId": "",
      "issuerUrl": "",
-     "internal": false,
+     "internal": '$isInternal',
      "users": ["'$tenantUser'"]
    }'
 }
@@ -47,7 +48,7 @@ WALLET_URL="http://wallet.localhost:${APP_USER_UI_PORT}"
 register_tenant $AUTH_APP_PROVIDER_WALLET_ADMIN_USER_NAME $APP_USER_PARTY "AppUser" $AUTH_APP_USER_WALLET_ADMIN_USER_NAME "$WALLET_URL"
 
 # Register additional role tenants (party IDs come from onboarding.sh via shared env)
-register_tenant $AUTH_APP_PROVIDER_WALLET_ADMIN_USER_NAME $SELLER_PARTY "Seller" "seller" "$WALLET_URL"
+register_tenant $AUTH_APP_PROVIDER_WALLET_ADMIN_USER_NAME $SELLER_PARTY "Seller" "seller" "$WALLET_URL" true
 register_tenant $AUTH_APP_PROVIDER_WALLET_ADMIN_USER_NAME $BUYER_PARTY "Buyer" "buyer" "$WALLET_URL"
 register_tenant $AUTH_APP_PROVIDER_WALLET_ADMIN_USER_NAME $LOGISTICS_PARTY "Logistics" "logistics" "$WALLET_URL"
 register_tenant $AUTH_APP_PROVIDER_WALLET_ADMIN_USER_NAME $FINANCE_PARTY "Finance" "finance" "$WALLET_URL"

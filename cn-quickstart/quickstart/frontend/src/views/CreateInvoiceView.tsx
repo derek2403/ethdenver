@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Trash2, Plus, ArrowLeft, Check, Loader2 } from 'lucide-react';
+import { ChevronDown, Trash2, Plus, ArrowLeft, Check, Loader2, Sparkles } from 'lucide-react';
 import { useInvoiceStore } from '../stores/invoiceStore';
+import { useUserStore } from '../stores/userStore';
 import type { CreateInvoiceRequest } from '../openapi.d.ts';
 import { cn } from '../components/ui/cn';
 import PageTransition from '../components/ui/PageTransition';
@@ -207,8 +208,9 @@ const inputClass =
 const CreateInvoiceView: React.FC = () => {
     const navigate = useNavigate();
     const { createInvoice } = useInvoiceStore();
+    const { user } = useUserStore();
 
-    /* ---- form state (unchanged) ---- */
+    /* ---- form state ---- */
     const [description, setDescription] = useState('');
     const [currency, setCurrency] = useState('CC');
     const [dueDate, setDueDate] = useState('');
@@ -231,7 +233,55 @@ const CreateInvoiceView: React.FC = () => {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
 
-    /* ---- updaters (unchanged) ---- */
+    /* ---- fill sample data ---- */
+    const fillSampleData = useCallback(async () => {
+        setDescription('Supply Chain Demo Invoice');
+        setCurrency('CC');
+        const due = new Date();
+        due.setDate(due.getDate() + 30);
+        setDueDate(due.toISOString().slice(0, 16));
+        setPaymentTerms('Net 30');
+        setPoNumber('PO-2026-001');
+
+        // Seller = user.party (the authenticated party from the backend)
+        const sellerParty = user?.party || '';
+        setSellerPartyId(sellerParty);
+        setSellerInfo({
+            partyName: 'Acme Supplies Inc.',
+            regNumber: 'REG-123456',
+            taxNumber: 'TAX-789012',
+            address: { street: '100 Main St', city: 'Denver', state: 'CO', postalCode: '80202', country: 'US' },
+            contact: { name: 'Alice Seller', email: 'alice@acme.com', phone: '+1-555-0100' },
+        });
+
+        // Fetch buyer party from /api/parties (env vars, no admin required)
+        try {
+            const resp = await fetch('/api/parties');
+            const parties = await resp.json();
+            setBuyerPartyId(parties.buyer || '');
+        } catch {
+            setBuyerPartyId('');
+        }
+        setBuyerInfo({
+            partyName: 'TechCorp Ltd.',
+            regNumber: 'REG-654321',
+            taxNumber: 'TAX-210987',
+            address: { street: '200 Market St', city: 'Boulder', state: 'CO', postalCode: '80301', country: 'US' },
+            contact: { name: 'Bob Buyer', email: 'bob@techcorp.com', phone: '+1-555-0200' },
+        });
+
+        setShippingAddress({ street: '200 Market St', city: 'Boulder', state: 'CO', postalCode: '80301', country: 'US' });
+
+        setLineItems([
+            { itemName: 'Industrial Widget A', sku: 'WDG-A', qty: 10, unit: 'EA', unitPrice: 25, discount: 0, taxRate: 8 },
+            { itemName: 'Premium Component B', sku: 'CMP-B', qty: 5, unit: 'EA', unitPrice: 45, discount: 10, taxRate: 8 },
+        ]);
+
+        setNotes('Demo invoice for ETHDenver hackathon');
+        setDeliveryTerms('FOB Destination');
+    }, [user]);
+
+    /* ---- updaters ---- */
     const updateSellerInfo = (field: string, value: string) => {
         setSellerInfo(prev => ({ ...prev, [field]: value }));
     };
@@ -356,6 +406,14 @@ const CreateInvoiceView: React.FC = () => {
                         Back
                     </Link>
                     <h1 className="text-2xl font-bold text-zinc-900">Create Invoice</h1>
+                    <button
+                        type="button"
+                        onClick={fillSampleData}
+                        className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    >
+                        <Sparkles className="h-4 w-4" />
+                        Fill Sample Data
+                    </button>
                 </div>
 
                 {/* Step indicator */}

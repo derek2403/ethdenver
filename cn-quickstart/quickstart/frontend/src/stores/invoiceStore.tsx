@@ -22,6 +22,7 @@ interface InvoiceContextType extends InvoiceState {
     createInvoice: (request: CreateInvoiceRequest) => Promise<void>;
     requestPayment: (contractId: string, request: RequestPaymentRequest) => Promise<void>;
     completePayment: (contractId: string, paymentRequestContractId: string, allocationContractId: string) => Promise<InvoicePaymentResult | void>;
+    markPaid: (contractId: string) => Promise<void>;
     cancelInvoice: (contractId: string, description: string) => Promise<void>;
     withdrawPaymentRequest: (contractId: string) => Promise<void>;
     shareWithCarrier: (contractId: string, carrier: string) => Promise<void>;
@@ -79,6 +80,17 @@ export const InvoiceProvider = ({ children }: { children: React.ReactNode }) => 
         [withErrorHandling, fetchInvoices, toast]
     );
 
+    const markPaid = useCallback(
+        withErrorHandling(`Marking Invoice as Paid`)(async (contractId: string) => {
+            const client: Client = await api.getClient();
+            const commandId = generateCommandId();
+            await client.markInvoicePaid({ contractId, commandId });
+            await fetchInvoices();
+            toast.displaySuccess('Invoice marked as paid');
+        }),
+        [withErrorHandling, fetchInvoices, toast]
+    );
+
     const cancelInvoice = useCallback(
         withErrorHandling(`Cancelling Invoice`)(async (contractId: string, description: string) => {
             const client: Client = await api.getClient();
@@ -132,6 +144,7 @@ export const InvoiceProvider = ({ children }: { children: React.ReactNode }) => 
                 createInvoice,
                 requestPayment,
                 completePayment,
+                markPaid,
                 cancelInvoice,
                 withdrawPaymentRequest,
                 shareWithCarrier,

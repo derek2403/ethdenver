@@ -104,6 +104,19 @@ template Invoice
         require "Invoice is not already paid" (status /= Paid)
         pure ()
 
+    -- | Mark the invoice as paid directly (demo shortcut, no wallet needed).
+    -- Archives the current invoice and creates a new one with status = Paid.
+    choice Invoice_MarkPaid : ContractId Invoice
+      with
+        paidAt : Time
+      controller provider
+      do
+        require "Invoice is open" (status == Issued || status == PartiallyPaid)
+        create this with
+          status = Paid
+          amountPaid = grandTotal
+          balanceDue = 0.0
+
     -- | Share logistics-only view with a carrier. Strips all price/tax/payment data.
     -- Creates a LogisticsView contract where the carrier is an observer.
     nonconsuming choice Invoice_ShareWithCarrier : ContractId LogisticsView

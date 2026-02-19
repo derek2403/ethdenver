@@ -34,6 +34,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import quickstart_invoicing.invoicing.invoice.Invoice;
 import quickstart_invoicing.invoicing.invoice.Invoice.Invoice_Cancel;
+import quickstart_invoicing.invoicing.invoice.Invoice.Invoice_MarkPaid;
 import quickstart_invoicing.invoicing.invoice.Invoice.Invoice_RequestPayment;
 import quickstart_invoicing.invoicing.invoice.Invoice.Invoice_ShareWithCarrier;
 import quickstart_invoicing.invoicing.invoice.Invoice.Invoice_ShareWithBookkeeper;
@@ -167,7 +168,7 @@ public class InvoiceApiImpl implements InvoicesApi {
                             new Party(party),                 // provider = admin (app provider)
                             0L,                               // invoiceNum (sequential per provider)
                             now,                              // invoiceDate
-                            Instant.parse(request.getDueDate().toString()),  // dueDate
+                            request.getDueDate().toInstant(),  // dueDate
                             orEmpty(request.getCurrency()),   // currency
                             sellerInfo,
                             buyerInfo,
@@ -270,6 +271,24 @@ public class InvoiceApiImpl implements InvoicesApi {
                             new Party(party),
                             new Metadata(meta)
                     );
+                    return ledger.exerciseAndGetResult(invoice.contractId, choice, commandId)
+                            .thenApply(r -> ResponseEntity.noContent().<Void>build());
+                })
+        ));
+    }
+
+    @Override
+    @WithSpan
+    public CompletableFuture<ResponseEntity<Void>> markInvoicePaid(
+            String contractId,
+            String commandId
+    ) {
+        var ctx = tracingCtx(logger, "markInvoicePaid",
+                "contractId", contractId, "commandId", commandId);
+        return auth.asAdminParty(party -> traceServiceCallAsync(ctx, () ->
+                damlRepository.findInvoiceById(contractId).thenCompose(optInvoice -> {
+                    var invoice = ensurePresent(optInvoice, "Invoice not found for contract %s", contractId);
+                    var choice = new Invoice_MarkPaid(Instant.now());
                     return ledger.exerciseAndGetResult(invoice.contractId, choice, commandId)
                             .thenApply(r -> ResponseEntity.noContent().<Void>build());
                 })

@@ -271,6 +271,26 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /invoices/{contractId}:mark-paid:
+    post:
+      tags: [Invoices]
+      summary: Mark an invoice as paid (demo shortcut, no wallet needed)
+      operationId: markInvoicePaid
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '204':
+          description: Invoice marked as paid
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /invoices/{contractId}:share-with-carrier:
     post:
       tags: [Invoices]
