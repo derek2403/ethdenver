@@ -1,0 +1,90 @@
+-- | Privacy view contracts demonstrating Canton's sub-transaction privacy model.
+-- Each view is a separate DAML template containing only the data that the
+-- specific role is allowed to see. The carrier's LogisticsView has no price
+-- fields at all — structurally enforced privacy, not app-layer filtering.
+module Invoicing.Disclosure where
+
+import Invoicing.Types
+import Splice.Api.Token.MetadataV1
+
+-- | A logistics-only view of an invoice, shared with a carrier.
+-- Contains shipping addresses, contacts, item names/quantities, and delivery terms.
+-- PRIVACY: NO price, discount, tax, total, or payment fields exist in this template.
+-- Even if the carrier's node is compromised, price data cannot be recovered.
+template LogisticsView
+  with
+    grantor : Party      -- ^ Party who shared this view (the seller)
+    carrier : Party      -- ^ Party who can see this view (logistics provider)
+    provider : Party     -- ^ App provider facilitating the disclosure
+    invoiceRef : Text    -- ^ Reference to the original invoice number
+    orderRef : Text      -- ^ Purchase order / sales order reference
+    shipFromAddress : Address  -- ^ Ship-from address (seller's warehouse)
+    shipToAddress : Address    -- ^ Ship-to address (buyer's delivery address)
+    sellerContact : Contact    -- ^ Seller's contact for logistics coordination
+    buyerContact : Contact     -- ^ Buyer's contact for delivery
+    items : [LogisticsItem]    -- ^ Items to ship (NO prices)
+    deliveryTerms : Text       -- ^ Delivery/shipping terms
+    notes : Text               -- ^ Relevant notes for the carrier
+    meta : Metadata            -- ^ Machine-readable metadata
+  where
+    signatory grantor, provider
+    observer carrier
+
+    -- | Carrier acknowledges they have received and reviewed this logistics view.
+    choice LogisticsView_Acknowledge : ()
+      with
+        ackMeta : Metadata
+      controller carrier
+      do
+        pure ()
+
+    -- | Grantor revokes the carrier's access to this view.
+    choice LogisticsView_Revoke : ()
+      with
+        revokeMeta : Metadata
+      controller grantor
+      do
+        pure ()
+
+
+-- | A financial summary view of an invoice, shared with a bookkeeper.
+-- Contains totals, tax breakdown, status, and item categories.
+-- PRIVACY: NO addresses, contacts, shipping details, or line item descriptions.
+template BookkeeperView
+  with
+    grantor : Party          -- ^ Party who shared this view (the seller)
+    bookkeeper : Party       -- ^ Party who can see this view (accountant/auditor)
+    provider : Party         -- ^ App provider facilitating the disclosure
+    invoiceNum : Int         -- ^ Invoice number
+    invoiceDate : Time       -- ^ When the invoice was created
+    sellerName : Text        -- ^ Seller's business name (no address/contact)
+    buyerName : Text         -- ^ Buyer's business name (no address/contact)
+    currency : Text          -- ^ Currency code
+    status : InvoiceStatus   -- ^ Current invoice status
+    subtotal : Decimal       -- ^ Pre-tax subtotal
+    totalDiscount : Decimal  -- ^ Total discounts applied
+    taxBreakdown : [TaxEntry] -- ^ Detailed tax entries
+    grandTotal : Decimal     -- ^ Final amount
+    amountPaid : Decimal     -- ^ Amount already settled
+    balanceDue : Decimal     -- ^ Remaining balance
+    itemCategories : [Text]  -- ^ Item category names only (no quantities, prices, descriptions)
+    meta : Metadata          -- ^ Machine-readable metadata
+  where
+    signatory grantor, provider
+    observer bookkeeper
+
+    -- | Bookkeeper acknowledges they have reviewed this financial view.
+    choice BookkeeperView_Acknowledge : ()
+      with
+        ackMeta : Metadata
+      controller bookkeeper
+      do
+        pure ()
+
+    -- | Grantor revokes the bookkeeper's access to this view.
+    choice BookkeeperView_Revoke : ()
+      with
+        revokeMeta : Metadata
+      controller grantor
+      do
+        pure ()

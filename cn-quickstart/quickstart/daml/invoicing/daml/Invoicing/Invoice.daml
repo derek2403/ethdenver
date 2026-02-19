@@ -1,0 +1,292 @@
+-- | Invoice contracts for the invoicing domain.
+-- An invoice represents a payment obligation from buyer to seller.
+-- Settlement is driven via the token standard's AllocationRequest interface.
+module Invoicing.Invoice where
+
+import DA.Assert (assertWithinDeadline, (===))
+
+import DA.Optional (fromSome)
+import DA.TextMap as TextMap
+
+import Invoicing.Util as Util (require)
+import Invoicing.Types
+import Invoicing.PaymentReceipt
+import Invoicing.Disclosure (LogisticsView(..), BookkeeperView(..))
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1
+import Splice.Api.Token.AllocationRequestV1
+import Splice.Api.Token.AllocationV1 as Api.Token.AllocationV1
+
+-- | Result of completing an invoice payment.
+data InvoicePaymentRequest_Complete_Result = InvoicePaymentRequest_Complete_Result
+  with
+    paidInvoiceId : ContractId Invoice
+    receiptId : ContractId PaymentReceipt
+  deriving (Eq, Show)
+
+-- | An invoice from a seller to a buyer, facilitated by the app provider.
+-- PRIVACY: only seller, buyer, and provider see this contract.
+template Invoice
+  with
+    seller : Party       -- ^ Party who issued the invoice
+    buyer : Party        -- ^ Party who owes payment
+    provider : Party     -- ^ App provider facilitating the transaction
+    -- Invoice identity
+    invoiceNum : Int     -- ^ Unique invoice number (unique per provider)
+    invoiceDate : Time   -- ^ When the invoice was created
+    dueDate : Time       -- ^ When payment is due
+    currency : Text      -- ^ Currency code (e.g. "CC" for Canton Coin)
+    -- Business parties info
+    sellerInfo : PartyInfo   -- ^ Seller business details
+    buyerInfo : PartyInfo    -- ^ Buyer business details
+    shippingAddress : Address -- ^ Where goods are shipped
+    -- Line items
+    lineItems : [LineItem]   -- ^ Goods/services being invoiced
+    -- Totals
+    subtotal : Decimal       -- ^ Sum of line subtotals before tax/discount
+    totalDiscount : Decimal  -- ^ Total discount amount
+    taxBreakdown : [TaxEntry] -- ^ Tax entries
+    totalTax : Decimal       -- ^ Sum of all taxes
+    grandTotal : Decimal     -- ^ Final amount due
+    amountPaid : Decimal     -- ^ Amount already paid
+    balanceDue : Decimal     -- ^ grandTotal - amountPaid
+    -- Payment
+    instrumentId : InstrumentId -- ^ Token instrument for payment
+    paymentTerms : Text      -- ^ Payment terms (e.g. "Net 30")
+    -- Optional fields
+    poNumber : Text          -- ^ Purchase order number
+    salesOrderNumber : Text  -- ^ Sales order number
+    notes : Text             -- ^ Free-text notes
+    deliveryTerms : Text     -- ^ Delivery/shipping terms
+    description : Text       -- ^ Human-readable description (used in payment metadata)
+    -- Status
+    status : InvoiceStatus   -- ^ Current status
+    meta : Metadata          -- ^ Machine-readable metadata
+  where
+    signatory seller, provider
+    observer buyer
+
+    -- | Request payment for this invoice. Creates an InvoicePaymentRequest
+    -- that implements AllocationRequest for wallet integration.
+    -- The invoice stays active while payment is pending.
+    nonconsuming choice Invoice_RequestPayment : ContractId InvoicePaymentRequest
+      with
+        requestId : Text
+        requestedAt : Time
+        prepareUntil : Time
+        settleBefore : Time
+      controller provider
+      do
+        require "Invoice is open" (status == Issued || status == PartiallyPaid)
+        assertWithinDeadline "prepareUntil" prepareUntil
+        require "prepareUntil < settleBefore" (prepareUntil < settleBefore)
+        create InvoicePaymentRequest with
+          requestId
+          seller
+          buyer
+          provider
+          invoiceNum
+          amount = balanceDue
+          instrumentId
+          description
+          prepareUntil
+          settleBefore
+          requestedAt
+
+    -- | Cancel an open invoice. Only seller or provider can cancel.
+    choice Invoice_Cancel : ()
+      with
+        actor : Party
+        cancelMeta : Metadata
+      controller actor
+      do
+        require "Actor is seller or provider" (actor == seller || actor == provider)
+        require "Invoice is not already paid" (status /= Paid)
+        pure ()
+
+    -- | Share logistics-only view with a carrier. Strips all price/tax/payment data.
+    -- Creates a LogisticsView contract where the carrier is an observer.
+    nonconsuming choice Invoice_ShareWithCarrier : ContractId LogisticsView
+      with
+        carrier : Party
+        actor : Party
+      controller actor
+      do
+        require "Actor is seller or provider" (actor == seller || actor == provider)
+        let toLogisticsItem li = LogisticsItem with
+              itemName = li.itemName
+              sku = li.sku
+              quantity = li.quantity
+              unitOfMeasure = li.unitOfMeasure
+              batchInfo = li.batchInfo
+              deliveryDate = li.deliveryDate
+        let logisticsItems = map toLogisticsItem lineItems
+        create LogisticsView with
+          grantor = seller
+          carrier
+          provider
+          invoiceRef = show invoiceNum
+          orderRef = poNumber
+          shipFromAddress = sellerInfo.address
+          shipToAddress = shippingAddress
+          sellerContact = sellerInfo.contact
+          buyerContact = buyerInfo.contact
+          items = logisticsItems
+          deliveryTerms
+          notes
+          meta = Metadata with values = TextMap.empty
+
+    -- | Share financial summary with a bookkeeper. Strips addresses, contacts, line item details.
+    -- Creates a BookkeeperView contract where the bookkeeper is an observer.
+    nonconsuming choice Invoice_ShareWithBookkeeper : ContractId BookkeeperView
+      with
+        bookkeeper : Party
+        actor : Party
+      controller actor
+      do
+        require "Actor is seller or provider" (actor == seller || actor == provider)
+        let categories = map (\li -> li.itemName) lineItems
+        create BookkeeperView with
+          grantor = seller
+          bookkeeper
+          provider
+          invoiceNum
+          invoiceDate
+          sellerName = sellerInfo.partyName
+          buyerName = buyerInfo.partyName
+          currency
+          status
+          subtotal
+          totalDiscount
+          taxBreakdown
+          grandTotal
+          amountPaid
+          balanceDue
+          itemCategories = categories
+          meta = Metadata with values = TextMap.empty
+
+
+-- | A request to pay an invoice. Implements AllocationRequest so wallets
+-- can allocate tokens for settlement. Once settled, the invoice is marked
+-- as Paid and a PaymentReceipt is created.
+template InvoicePaymentRequest
+  with
+    requestId : Text         -- ^ Globally unique id (e.g. a UUID)
+    seller : Party           -- ^ Party who issued the invoice
+    buyer : Party            -- ^ Party who owes payment
+    provider : Party         -- ^ App provider facilitating the transaction
+    invoiceNum : Int         -- ^ The invoice number being paid
+    amount : Decimal         -- ^ Amount to be paid
+    instrumentId : InstrumentId -- ^ Token instrument for payment
+    description : Text       -- ^ Reason for payment
+    prepareUntil : Time      -- ^ Until when senders can allocate assets
+    settleBefore : Time      -- ^ Until when executor can execute settlement
+    requestedAt : Time       -- ^ When the payment was requested
+  where
+    signatory seller, provider
+    observer buyer
+
+    -- | Complete the payment by finalizing the token transfer via Allocation.
+    -- Archives the old invoice and creates a Paid invoice + PaymentReceipt.
+    postconsuming choice InvoicePaymentRequest_Complete : InvoicePaymentRequest_Complete_Result
+      with
+        allocationCid : ContractId Allocation
+        invoiceCid : ContractId Invoice
+        extraArgs : ExtraArgs
+      controller provider
+      do
+        assertWithinDeadline "settleBefore" settleBefore
+
+        alloc <- fetch @Allocation allocationCid
+        let allocView = view @Allocation alloc
+            thisView = view $ toInterface @AllocationRequest this
+            expectedTransferLegId = invoicePaymentLegId
+            expectedTransferLeg = fromSome $ TextMap.lookup expectedTransferLegId thisView.transferLegs
+            expectedSettlement = thisView.settlement
+
+        -- validate that allocation matches this payment request
+        expectedTransferLegId === allocView.allocation.transferLegId
+        expectedTransferLeg === allocView.allocation.transferLeg
+        expectedSettlement === allocView.allocation.settlement
+
+        exercise allocationCid (Allocation_ExecuteTransfer extraArgs)
+
+        -- validate and archive the old invoice
+        oldInvoice <- fetch invoiceCid
+        invoiceNum === oldInvoice.invoiceNum
+        seller === oldInvoice.seller
+        buyer === oldInvoice.buyer
+        provider === oldInvoice.provider
+        require "Invoice is open" (oldInvoice.status == Issued || oldInvoice.status == PartiallyPaid)
+        archive invoiceCid
+
+        -- create the paid invoice
+        now <- getTime
+        paidInvoiceId <- create oldInvoice with
+          status = Paid
+          amountPaid = oldInvoice.amountPaid + amount
+          balanceDue = oldInvoice.balanceDue - amount
+
+        -- create immutable payment receipt
+        receiptId <- create PaymentReceipt with
+          payer = buyer
+          payee = seller
+          provider
+          amount
+          instrumentId
+          description
+          invoiceNum = Some invoiceNum
+          payslipNum = None
+          settledAt = now
+          requestId
+          meta = Metadata with
+            values = TextMap.fromList
+              [("splice.lfdecentralizedtrust.org/reason", description)]
+
+        pure InvoicePaymentRequest_Complete_Result with
+          paidInvoiceId
+          receiptId
+
+    interface instance AllocationRequest for InvoicePaymentRequest where
+      view =
+        let
+          reqMeta = Metadata with
+            values = TextMap.fromList
+              [ ("splice.lfdecentralizedtrust.org/reason", description)
+              , ("cn-quickstart.example.org/invoiceNum", show invoiceNum)
+              ]
+        in
+          AllocationRequestView
+            with
+              settlement =
+                SettlementInfo
+                  with
+                    executor = provider
+                    requestedAt
+                    allocateBefore = prepareUntil
+                    settleBefore
+                    settlementRef =
+                      Reference
+                        with
+                          id = requestId
+                          cid = None
+                    meta = reqMeta
+              transferLegs = TextMap.fromList
+                [(invoicePaymentLegId, Api.Token.AllocationV1.TransferLeg
+                    with
+                      sender = buyer
+                      receiver = seller
+                      amount
+                      instrumentId
+                      meta = reqMeta)
+                ]
+              meta = reqMeta
+
+      allocationRequest_RejectImpl _ AllocationRequest_Reject{..} = do
+        require "Actor is the buyer paying the invoice" (actor == buyer)
+        pure ChoiceExecutionMetadata with meta = emptyMetadata
+
+      allocationRequest_WithdrawImpl _ _ =
+        pure ChoiceExecutionMetadata with meta = emptyMetadata
+
+invoicePaymentLegId = "invoicePayment"

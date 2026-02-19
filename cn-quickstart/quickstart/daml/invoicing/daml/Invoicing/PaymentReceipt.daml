@@ -1,0 +1,25 @@
+-- | Immutable proof that a payment was settled on-ledger.
+-- Created by InvoicePaymentRequest_Complete or PayslipPaymentRequest_Complete.
+module Invoicing.PaymentReceipt where
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1
+
+-- | Proof that a payment was settled.
+-- PRIVACY: only payer, payee, and provider see this contract.
+template PaymentReceipt
+  with
+    payer : Party            -- ^ The party who paid
+    payee : Party            -- ^ The party who received payment
+    provider : Party         -- ^ The app provider who facilitated the transaction
+    amount : Decimal         -- ^ Amount settled
+    instrumentId : InstrumentId -- ^ Token instrument used for payment
+    description : Text       -- ^ Human-readable description
+    invoiceNum : Optional Int -- ^ Set if this receipt is for an invoice payment
+    payslipNum : Optional Int -- ^ Set if this receipt is for a payslip payment
+    settledAt : Time         -- ^ When the settlement occurred
+    requestId : Text         -- ^ Correlation ID linking to the original payment request
+    meta : Metadata          -- ^ Machine-readable metadata
+  where
+    signatory provider
+    observer payer, payee

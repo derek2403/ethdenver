@@ -1,0 +1,70 @@
+-- | Shared data types for the invoicing domain.
+-- These types are used across Invoice, LogisticsView, and BookkeeperView templates.
+module Invoicing.Types where
+
+-- | A physical or mailing address.
+data Address = Address
+  with
+    street : Text
+    city : Text
+    state : Text
+    postalCode : Text
+    country : Text
+  deriving (Eq, Show)
+
+-- | Contact information for a person or department.
+data Contact = Contact
+  with
+    name : Text
+    email : Text
+    phone : Text
+  deriving (Eq, Show)
+
+-- | Business entity information (seller or buyer).
+data PartyInfo = PartyInfo
+  with
+    partyName : Text
+    regNumber : Text
+    taxNumber : Text
+    address : Address
+    contact : Contact
+  deriving (Eq, Show)
+
+-- | A single line item on an invoice with full pricing.
+data LineItem = LineItem
+  with
+    itemName : Text
+    sku : Text
+    quantity : Decimal
+    unitOfMeasure : Text
+    unitPrice : Decimal
+    discount : Decimal
+    taxRate : Decimal
+    lineSubtotal : Decimal
+    batchInfo : Text
+    deliveryDate : Text
+  deriving (Eq, Show)
+
+-- | A tax entry in the tax breakdown.
+data TaxEntry = TaxEntry
+  with
+    taxName : Text
+    taxRate : Decimal
+    taxAmount : Decimal
+  deriving (Eq, Show)
+
+-- | A logistics-only line item. Structurally private: NO price/discount/tax fields.
+-- Even if a carrier's node is compromised, price data does not exist.
+data LogisticsItem = LogisticsItem
+  with
+    itemName : Text
+    sku : Text
+    quantity : Decimal
+    unitOfMeasure : Text
+    batchInfo : Text
+    deliveryDate : Text
+  deriving (Eq, Show)
+
+-- | Status of an invoice.
+data InvoiceStatus = Issued | PartiallyPaid | Paid | Void
+  deriving (Eq, Show)
