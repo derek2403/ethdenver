@@ -40,3 +40,19 @@ application:
       tenantId: AppProvider
       partyId: ${APP_PROVIDER_PARTY}
       internal: true
+    Seller:
+      tenantId: Seller
+      partyId: ${SELLER_PARTY:${APP_PROVIDER_PARTY}}
+      internal: true
+    Buyer:
+      tenantId: Buyer
+      partyId: ${BUYER_PARTY:}
+      internal: false
+    Logistics:
+      tenantId: Logistics
+      partyId: ${LOGISTICS_PARTY:}
+      internal: false
+    Finance:
+      tenantId: Finance
+      partyId: ${FINANCE_PARTY:}
+      internal: false

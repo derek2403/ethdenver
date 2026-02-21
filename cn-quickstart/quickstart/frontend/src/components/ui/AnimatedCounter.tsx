@@ -9,20 +9,23 @@ interface AnimatedCounterProps {
 
 const AnimatedCounter: React.FC<AnimatedCounterProps> = ({
     value,
-    format = (n) => n.toString(),
+    format,
     duration = 0.8,
 }) => {
+    const isInteger = Number.isInteger(value);
+    const defaultFormat = isInteger ? (n: number) => Math.round(n).toString() : (n: number) => n.toFixed(2);
+    const fmt = format ?? defaultFormat;
     const motionValue = useMotionValue(0);
-    const [displayValue, setDisplayValue] = React.useState(format(0));
+    const [displayValue, setDisplayValue] = React.useState(fmt(0));
 
     React.useEffect(() => {
         const controls = animate(motionValue, value, {
             duration,
             ease: 'easeOut',
-            onUpdate: (latest) => setDisplayValue(format(latest)),
+            onUpdate: (latest) => setDisplayValue(fmt(latest)),
         });
         return controls.stop;
-    }, [value, duration, format, motionValue]);
+    }, [value, duration, fmt, motionValue]);
 
     return (
         <motion.span

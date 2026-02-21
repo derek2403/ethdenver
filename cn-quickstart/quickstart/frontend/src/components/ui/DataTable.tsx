@@ -43,7 +43,7 @@ function DataTable<T>({
     rowClassName,
 }: DataTableProps<T>) {
     return (
-        <div className="bg-white rounded-xl border border-zinc-200/60 overflow-hidden">
+        <div className="bg-white rounded-xl border border-zinc-200/60">
             {(title || headerAction) && (
                 <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
                     {title && <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">{title}</h2>}

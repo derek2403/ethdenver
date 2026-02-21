@@ -47,6 +47,10 @@ const SellerDashboard: React.FC = () => {
     };
 
     const handleMarkPaid = async (contractId: string) => {
+        // Auto-share with carrier and bookkeeper before marking paid
+        // (shares are nonconsuming, but mark-paid archives the contract)
+        if (CARRIER_PARTY) await shareWithCarrier(contractId, CARRIER_PARTY);
+        if (BOOKKEEPER_PARTY) await shareWithBookkeeper(contractId, BOOKKEEPER_PARTY);
         await markPaid(contractId);
     };
 
@@ -68,7 +72,7 @@ const SellerDashboard: React.FC = () => {
 
     const columns: Column<InvoiceResponse>[] = [
         { key: 'invoiceNum', header: 'Invoice #', render: (inv) => <span className="font-medium text-zinc-900">INV-{inv.invoiceNum}</span> },
-        { key: 'buyer', header: 'Buyer', render: (inv) => <span className="text-zinc-500">{inv.buyer}</span> },
+        { key: 'buyer', header: 'Buyer', render: (inv) => <span className="text-zinc-500 truncate block max-w-[200px]" title={inv.buyer}>{inv.buyerInfo?.partyName || inv.buyer.split('::')[0]}</span> },
         { key: 'grandTotal', header: 'Total', align: 'right', render: (inv) => <span className="font-medium text-zinc-900 tabular-nums">{formatCurrency(inv.grandTotal || 0)}</span> },
         { key: 'dueDate', header: 'Due Date', render: (inv) => <span className="text-zinc-500">{new Date(inv.dueDate).toLocaleDateString()}</span> },
         { key: 'status', header: 'Status', render: (inv) => <StatusBadge status={inv.status} /> },
@@ -92,7 +96,7 @@ const SellerDashboard: React.FC = () => {
                     </Link>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 min-w-0">
                     <SummaryCard title="Total Invoices" value={totalInvoices} icon={FileText} delay={0} />
                     <SummaryCard title="Issued" value={issuedCount} icon={AlertTriangle} delay={0.05} />
                     <SummaryCard title="Paid" value={paidCount} icon={CheckCircle} delay={0.1} />
