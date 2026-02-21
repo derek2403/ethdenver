@@ -63,9 +63,6 @@ These changes reduce onboarding time by:
 - ✅ **Open Source Repo:** contains this report + reproducibility notes + artifacts  
 - ✅ **Meaningful Daml Engagement:** attempted project setup + ledger API integration + DevNet attempt  
 - ✅ **Documentation Quality:** structured Markdown with actionable fixes and before/after patches  
-- ⬜ **Terminal Screenshot with timestamp:** add screenshot here: `evidence/terminal_timestamp.png`  
-- ⬜ **Demo video (2–5 min):** add link: `<link>`  
-- ⬜ **Hurdle video (5–10 min):** add link: `<link>`
 
 ---
 
@@ -249,7 +246,7 @@ A beginner-friendly flow that teaches:
 
 ---
 
-## 8) Technical Cliffs (Minimum 3)
+## 8) Technical Cliffs 
 
 > A “Technical Cliff” = a point where devs are likely to get stuck hard without a clear escape route.
 
